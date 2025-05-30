@@ -1,0 +1,130 @@
+openapi: 3.0.1
+info:
+  title: Streaming and Downloading API
+  version: 1.0.0
+  description: |
+    This API allows (pre-authenticated) users to access a specific video by segment or broadcast ID. If access is authorized, the API returns a `Set-Cookie` header granting a signed cookie and indicates the segment stream path. NOT NEEDED, per 4/21 discussion, Eric's team is handling this. The API also provides a download option for the video segment.)
+
+servers:
+  - url: https://tvnews.vanderbilt.edu
+
+paths:
+  /stream:
+    get:
+      summary: Request access to stream a video segment
+      operationId: streamSegment
+      tags:
+        - Streaming
+      parameters:
+        - name: segment_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Unique identifier for the video segment to stream
+        - name: broadcast_id
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Unique identifier for the full broadcast to stream          
+      responses:
+        '200':
+          description: Access granted, video exists
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+            Access-Control-Allow-Origin:
+              schema:
+                type: string
+            Access-Control-Allow-Credentials:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  segment_path:
+                    type: string
+        '403':
+          description: User not authorized to access the video
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '404':
+          description: Video ID not found
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+  /download:
+      get:
+        summary: Request access to download a video 
+        operationId: downloadSegment
+        tags:
+          - Download
+        parameters:
+          - name: segment_id
+            in: query
+            required: false
+            schema:
+              type: string
+            description: Unique identifier for the video to download
+          - name: broadcast_id
+            in: query
+            required: false
+            schema:
+              type: string
+            description: Unique identifier for the full broadcast to download        
+        responses:
+          '200':
+            description: Access granted, video exists
+            headers:
+              Set-Cookie:
+                schema:
+                  type: string
+              Access-Control-Allow-Origin:
+                schema:
+                  type: string
+              Access-Control-Allow-Credentials:
+                schema:
+                  type: string
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+                    segment_path:
+                      type: string
+          '403':
+            description: User not authorized to access the video
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+          '404':
+            description: Video ID not found
+            content:
+              application/json:
+                schema:
+                  type: object
+                  properties:
+                    message:
+                      type: string
+

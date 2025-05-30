@@ -1,0 +1,124 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Aurora MySQL v2 Serverless Database Cluster for TVNEWS Search 
+
+Parameters:
+
+  DatabaseName:
+    Type: String
+    Default: "metadatadb"
+    Description: The name of the database to create.
+
+  DatabaseUsername:
+    Type: String
+    Default: "adminuser"
+    Description: Master database username.
+
+  DatabasePassword:
+    Type: String
+    NoEcho: true
+    Description: Master database password (will not show in the console).
+
+  VpcId:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC where the database will be deployed.
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private Subnet 1 for the DB Cluster.
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet::Id
+    Description: Private Subnet 2 for the DB Cluster.
+
+Resources:
+
+  RdsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security Group to allow Lambda access to RDS"
+      VpcId: !Ref VpcId
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          CidrIp: 10.192.0.0/16   
+      Tags:
+        - Key: Name
+          Value: rds-security-group
+
+  RdsSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Subnet group for RDS instances (private subnets)"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  SearchDatabaseCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.08.2" 
+      EngineMode: serverless
+      DatabaseName: !Ref DatabaseName
+      MasterUsername: !Ref DatabaseUsername
+      MasterUserPassword: !Ref DatabasePassword
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref RdsSecurityGroup
+      BackupRetentionPeriod: 1
+      StorageEncrypted: true
+      EnableHttpEndpoint: true  
+      DeletionProtection: false
+      ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 2
+        AutoPause: true
+        SecondsUntilAutoPause: 300
+
+  SearchDatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref SearchDatabaseCluster
+      DBInstanceClass: db.serverless
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+
+  LambdaToRdsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaToRdsAccessRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: LambdaRdsAccessPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - rds-data:ExecuteStatement
+                  - rds-data:BatchExecuteStatement
+                  - rds-data:BeginTransaction
+                  - rds-data:CommitTransaction
+                  - rds-data:RollbackTransaction
+                Resource: "*"
+
+Outputs:
+
+  DatabaseClusterEndpoint:
+    Description: RDS Cluster endpoint address
+    Value: !GetAtt SearchDatabaseCluster.Endpoint.Address
+
+  DatabaseClusterArn:
+    Description: ARN of the RDS DB Cluster
+    Value: !GetAtt SearchDatabaseCluster.Arn
+
+  LambdaToRdsRoleArn:
+    Description: IAM Role that allows Lambda functions to access RDS Data API
+    Value: !GetAtt LambdaToRdsRole.Arn

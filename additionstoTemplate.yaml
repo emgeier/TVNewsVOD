@@ -1,0 +1,83 @@
+  secureStreaming:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: !Sub
+        - Stack ${AWS::StackName} Function ${ResourceName}
+        - ResourceName: secureStreaming
+      CodeUri: src/Function
+      Handler: index.handler
+      Runtime: python3.13
+      MemorySize: 3008
+      Timeout: 30
+      Tracing: Active
+      Architectures:
+        - arm64
+      VpcConfig:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+      Environment:
+        Variables:
+          DB_SECRET_ARN: !Ref RdsCredentialsSecret
+          DB_CLUSTER_ARN: !GetAtt SearchDatabaseCluster.Arn
+          DB_NAME: !Ref DatabaseName
+      Policies:
+        - AWSLambdaVPCAccessExecutionRole  
+        - Statement:
+            - Effect: Allow
+              Action:
+                - rds-data:ExecuteStatement
+                - rds-data:BatchExecuteStatement
+                - rds-data:BeginTransaction
+                - rds-data:CommitTransaction
+                - rds-data:RollbackTransaction
+              Resource: "*"
+      Events:
+        TVNAStreamingApiGETstream:
+          Type: Api
+          Properties:
+            Path: /stream
+            Method: GET
+            RestApiId: !Ref TVNAStreamingApi
+
+        - !Ref PrivateSubnet2
+  RdsCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: rds-credentials-secret
+      Description: RDS credentials for the search database
+      GenerateSecretString:
+        SecretStringTemplate: !Sub |
+          {
+            "username": "${DatabaseUsername}"
+          }
+        GenerateStringKey: "password"
+        PasswordLength: 32
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: Name
+          Value: rds-credentials        
+
+  SearchDatabaseCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-mysql
+      EngineVersion: "8.0.mysql_aurora.3.08.2" 
+      EngineMode: serverless
+      DatabaseName: !Ref DatabaseName
+      MasterUsername: !Join [ "", [ "{{resolve:secretsmanager:", !Ref RdsCredentialsSecret, ":SecretString:username}}" ] ]
+      MasterUserPassword: !Join [ "", [ "{{resolve:secretsmanager:", !Ref RdsCredentialsSecret, ":SecretString:password}}" ] ]
+      DBSubnetGroupName: !Ref RdsSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref RdsSecurityGroup
+      BackupRetentionPeriod: 1
+      StorageEncrypted: true
+      EnableHttpEndpoint: true  
+      DeletionProtection: false
+      ScalingConfiguration:
+        MinCapacity: 0.5
+        MaxCapacity: 2
+        AutoPause: true
+        SecondsUntilAutoPause: 300            
